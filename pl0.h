@@ -50,7 +50,7 @@
 
 enum object
 {
-    constant, variable, proc
+    constant, variable, parameter, proc
 };
 
 enum fct
@@ -111,7 +111,8 @@ char* err_msg[] =
 /* 33 */ "exit not in while",
 /* 34 */ "'(' expected",
 /* 35 */ "':' expected",
-/* 36 */ "only integer type supported",
+/* 36 */ "argument count mismatch",
+/* 37 */ "procedure expected '(' with parameters",
 /* 99 */ "Comment not closed",
 /*100 */ "while nesting too deep",
 };
@@ -153,6 +154,7 @@ FILE* infile;
 long dx;		// data allocation index
 long lev;		// current depth of block nesting
 long tx;		// current table index
+long proc_entry_tx;	// table index of current procedure entry for tx0
 
 // the following array space for interpreter
 #define stacksize 50000

@@ -175,6 +175,10 @@ void enter(enum object k)		// enter object into table
             table[tx].level = lev; table[tx].addr = dx; dx = dx + 1;
             break;
 
+        case parameter:
+            table[tx].level = lev; table[tx].addr = dx; dx = dx + 1;
+            break;
+
         case proc:
             table[tx].level = lev;
             break;
@@ -283,6 +287,7 @@ void factor(unsigned long long fsys)
                         break;
 
                     case variable:
+                    case parameter:
                         gen(lod, lev-table[i].level, table[i].addr);
                         break;
 
@@ -443,7 +448,7 @@ void statement(unsigned long long fsys)
     {
         i = position(id);
         if (i == 0) error(11);
-        else if (table[i].kind != variable) { error(12); i = 0; }
+        else if (table[i].kind != variable && table[i].kind != parameter) { error(12); i = 0; }
         getsym();
         if (sym == becomes) getsym(); else error(13);
         expression(fsys);
@@ -451,15 +456,32 @@ void statement(unsigned long long fsys)
     }
     else if (sym == callsym)
     {
+        long nargs;
         getsym();
         if (sym != ident) error(14);
         else
         {
             i = position(id);
             if (i == 0) error(11);
-            else if (table[i].kind == proc) gen(cal, lev - table[i].level, table[i].addr);
-            else error(15);
-            getsym();
+            else if (table[i].kind == proc)
+            {
+                getsym();
+                nargs = 0;
+                if (sym == lparen)
+                {
+                    getsym();
+                    do
+                    {
+                        expression(fsys | rparen | comma);
+                        nargs++;
+                        if (sym == comma) getsym();
+                    } while (sym != rparen);
+                    if (sym == rparen) getsym(); else error(22);
+                }
+                if (nargs != table[i].paracount) error(36);
+                gen(cal, lev - table[i].level, table[i].addr);
+            }
+            else { error(15); getsym(); }
         }
     }
     else if (sym == ifsym)
@@ -503,7 +525,7 @@ void statement(unsigned long long fsys)
             if (sym != ident) error(11);
             i = position(id);
             if (i == 0) error(11);
-            else if (table[i].kind != variable) error(12);
+            else if (table[i].kind != variable && table[i].kind != parameter) error(12);
             getsym();
             gen(opr, 0, 16);
             gen(sto, lev - table[i].level, table[i].addr);
@@ -554,8 +576,12 @@ void block(unsigned long long fsys)
     long cx0; 		// initial code index
     long tx1;		// save current table index before processing nested procedures
     long dx1;		// save data allocation index
+    long saved_proc_tx;	// save proc_entry_tx for nested procedures
+    long npar;		// parameter count for current procedure
 
-    dx=3; tx0=tx; table[tx].addr=cx; gen(jmp,0,0);
+    saved_proc_tx = proc_entry_tx;
+
+    dx=3; tx0 = proc_entry_tx; table[tx0].addr=cx; gen(jmp,0,0);
 
     if(lev>levmax)
     {
@@ -611,16 +637,46 @@ void block(unsigned long long fsys)
 
         while(sym==procsym)
         {
+            long proc_idx;
+
             getsym();
             if(sym==ident)
             {
-                enter(proc); getsym();
+                enter(proc); proc_idx = tx; getsym();
             }
             else
             {
-                error(4);
+                proc_idx = 0; error(4);
             }
-            
+
+            npar = 0;
+            if (sym == lparen)
+            {
+                long param_base;
+                getsym();
+                param_base = tx;
+                do
+                {
+                    if (sym == ident)
+                    {
+                        tx++;
+                        strcpy(table[tx].name, id);
+                        table[tx].kind = parameter;
+                        table[tx].level = lev + 1;
+                        npar++; getsym();
+                    }
+                    else error(4);
+                    if (sym == comma) getsym();
+                } while (sym != rparen);
+                if (sym == rparen) getsym(); else error(22);
+                /* assign negative addresses: first param at -npar, last at -1 */
+                {
+                    long j;
+                    for (j = 0; j < npar; j++)
+                        table[param_base + 1 + j].addr = -(npar - j);
+                }
+            }
+            if (proc_idx) table[proc_idx].paracount = npar;
 
             if(sym==semicolon)
             {
@@ -630,11 +686,12 @@ void block(unsigned long long fsys)
             {
                 error(5);
             }
-            
+
             lev=lev+1; tx1=tx; dx1=dx;
+            if (proc_idx) proc_entry_tx = proc_idx;
             block(fsys|semicolon);
             lev=lev-1; tx=tx1; dx=dx1;
-            
+
             if(sym==semicolon)
             {
                 getsym();
@@ -656,6 +713,7 @@ void block(unsigned long long fsys)
     gen(opr,0,0); // return
     test(fsys,0,8);
     listcode(cx0);
+    proc_entry_tx = saved_proc_tx;
 }
 
 long base(long b, long l)
@@ -870,7 +928,7 @@ int main()
 
     err=0;
     cc=0; cx=0; ll=0; ch=' '; getsym();
-    lev=0; tx=0;
+    lev=0; tx=0; proc_entry_tx = 0;
     block(declbegsys|statbegsys|period);
     
     if(sym!=period)
