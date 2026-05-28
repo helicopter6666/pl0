@@ -1,6 +1,7 @@
-#include <stdio.h>
+﻿#include <stdio.h>
 
-#define norw        11             // no. of reserved words
+//将norw修改为15
+#define norw        15             // no. of reserved words
 #define txmax       100            // length of identifier table
 #define nmax        14             // max. no. of digits in numbers
 #define al          10             // length of identifiers
@@ -38,6 +39,14 @@
 #define constsym    0x8000000
 #define varsym      0x10000000
 #define procsym     0x20000000
+
+//增加新的符号和保留字
+#define elsesym    0x40000000   // else
+#define exitsym    0x80000000   // exit
+#define readsym   0x100000000ULL  // read
+#define writesym  0x200000000ULL  // write
+#define colon     0x400000000   // 单独的 ':'
+
 
 enum object
 {
@@ -98,12 +107,18 @@ char* err_msg[] =
 /* 29 */    "",
 /* 30 */    "",
 /* 31 */    "The number is too great.",
-/* 32 */    "There are too many levels."
+/* 32 */    "There are too many levels.",
+/* 33 */ "exit not in while",
+/* 34 */ "'(' expected",
+/* 35 */ "':' expected",
+/* 36 */ "only integer type supported",
+/* 99 */ "Comment not closed",
+/*100 */ "while nesting too deep",
 };
 
 
 char ch;               // last character read
-unsigned long sym;     // last symbol read
+unsigned long long sym;     // last symbol read
 char id[al+1];         // last identifier read
 long num;              // last number read
 long cc;               // character count
@@ -115,11 +130,11 @@ char line[81];
 char a[al+1];
 instruction code[cxmax+1];
 char word[norw][al+1];
-unsigned long wsym[norw];
-unsigned long ssym[256];
+unsigned long long wsym[norw];
+unsigned long long ssym[256];
 
 char mnemonic[8][3+1];
-unsigned long declbegsys, statbegsys, facbegsys;
+unsigned long long declbegsys, statbegsys, facbegsys;
 
 struct
 {
@@ -128,6 +143,7 @@ struct
     long val;
     long level;
     long addr;
+    long paracount;   //新增：参数个数，仅对 proc 有效
 }table[txmax+1];
 
 char infilename[80];

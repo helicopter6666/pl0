@@ -1,7 +1,15 @@
-// pl/0 compiler with code generation
+﻿// pl/0 compiler with code generation
+
+#define _CRT_SECURE_NO_WARNINGS
+#define MAX_WHILE_NEST 32
 #include <stdlib.h>
 #include <string.h>
 #include "pl0.h"
+#include <ctype.h>
+
+long while_exit_stack[MAX_WHILE_NEST];
+long while_sp = 0;
+
 
 void error(long n)
 {
@@ -53,125 +61,66 @@ void getch()
 
 void getsym()
 {
-    long i, j, k;
+    long i, k;
+    while (ch == ' ' || ch == '\t') getch();
 
-    while(ch == ' ' || ch == '\t')
-    {
-        getch();
+    // 处理 /* 注释
+    if (ch == '/' && (cc + 1 <= ll) && line[cc + 1] == '*') {
+        getch(); getch();
+        while (1) {
+            if (ch == '*' && (cc + 1 <= ll) && line[cc + 1] == '/') {
+                getch(); getch();
+                break;
+            }
+            if (feof(infile) && cc >= ll) { error(99); break; }
+            getch();
+        }
+        getsym();
+        return;
     }
 
-    if(isalpha(ch)) 	// identified or reserved
-    {
+    if (isalpha(ch)) {
         k = 0;
-
-        do
-        {
-            if(k < al)
-            {
-                a[k] = ch; k = k + 1;
-            }
-
+        do {
+            if (k < al) a[k] = ch;
+            k++;
             getch();
-        } while(isalpha(ch) || isdigit(ch));
-
-        if(k >= kk)
-        {
-            kk = k;
-        }
-        else
-        {
-            do
-            {
-                kk = kk-1; a[kk] = ' ';
-            } while(k < kk);
-        }
-
-        strcpy(id, a); i = 0; j = norw - 1;
-
-        do
-        {
-            k = (i+j)/2;
-
-            if(strcmp(id, word[k]) <= 0)
-            {
-                j = k - 1;
+        } while (isalpha(ch) || isdigit(ch));
+        a[k] = '\0';
+        strcpy(id, a);
+        sym = ident;
+        for (i = 0; i < norw; i++) {
+            if (strcmp(id, word[i]) == 0) {
+                sym = wsym[i];
+                break;
             }
-
-            if(strcmp(id, word[k]) >=0)
-            {
-                i = k + 1;
-            }
-        } while(i <= j);
-      
-        if(i-1 > j)
-        {
-            sym = wsym[k];
-        }
-        else
-        {
-            sym = ident;
         }
     }
-    else if(isdigit(ch)) // number
-    {
+    else if (isdigit(ch)) {
         k = 0; num = 0; sym = number;
-        do
-        {
+        do {
             num = num * 10 + (ch - '0');
-            k = k + 1;
-            getch();
-        } while(isdigit(ch));
-        
-        if(k > nmax)
-        {
-            error(31);
-        }
+            k++; getch();
+        } while (isdigit(ch));
+        if (k > nmax) error(31);
     }
-    else if(ch == ':')
-    {
+    else if (ch == ':') {
         getch();
-        
-        if(ch == '=')
-        {
-            sym = becomes; getch();
-        }
-        else
-        {
-            sym = nul;
-        }
+        if (ch == '=') { sym = becomes; getch(); }
+        else sym = colon;
     }
-    else if(ch == '<')
-    {
+    else if (ch == '<') {
         getch();
-    
-        if(ch == '=')
-        {
-            sym = leq; getch();
-        }
-        else if(ch == '>')
-        {
-            sym=neq; getch();
-        }
-        else
-        {
-            sym = lss;
-        }
+        if (ch == '=') { sym = leq; getch(); }
+        else if (ch == '>') { sym = neq; getch(); }
+        else sym = lss;
     }
-    else if(ch == '>')
-    {
+    else if (ch == '>') {
         getch();
-        
-        if(ch == '=')
-        {
-            sym=geq; getch();
-        }
-        else
-        {
-            sym=gtr;
-        }
+        if (ch == '=') { sym = geq; getch(); }
+        else sym = gtr;
     }
-    else
-    {
+    else {
         sym = ssym[(unsigned char)ch]; getch();
     }
 }
@@ -189,7 +138,7 @@ void gen(enum fct x, long y, long z)
     cx = cx + 1;
 }
 
-void test(unsigned long s1, unsigned long s2, long n)
+void test(unsigned long long s1, unsigned long long s2, long n)
 {
     if (!(sym & s1))
     {
@@ -307,9 +256,9 @@ void listcode(long cx0)         // list code generated for this block
     }
 }
 
-void expression(unsigned long);
+void expression(unsigned long long);
 
-void factor(unsigned long fsys)
+void factor(unsigned long long fsys)
 {
     long i;
 
@@ -374,9 +323,9 @@ void factor(unsigned long fsys)
     }
 }
 
-void term(unsigned long fsys)
+void term(unsigned long long fsys)
 {
-    unsigned long mulop;
+    unsigned long long mulop;
 
     factor(fsys|times|slash);
 
@@ -396,9 +345,9 @@ void term(unsigned long fsys)
     }
 }
 
-void expression(unsigned long fsys)
+void expression(unsigned long long fsys)
 {
-    unsigned long addop;
+    unsigned long long addop;
 
     if(sym==plus || sym==minus)
     {
@@ -433,9 +382,9 @@ void expression(unsigned long fsys)
     }
 }
 
-void condition(unsigned long fsys)
+void condition(unsigned long long fsys)
 {
-    unsigned long relop;
+    unsigned long long relop;
 
     if(sym==oddsym)
     {
@@ -486,129 +435,120 @@ void condition(unsigned long fsys)
     }
 }
 
-void statement(unsigned long fsys)
+void statement(unsigned long long fsys)
 {
-    long i,cx1,cx2;
+    long i, cx1, cx2;
 
-    if(sym==ident)
+    if (sym == ident)
     {
-        i=position(id);
-        if(i==0)
-        {
-            error(11);
-        }
-        else if(table[i].kind!=variable)	// assignment to non-variable
-        {
-            error(12); i=0;
-        }
-
+        i = position(id);
+        if (i == 0) error(11);
+        else if (table[i].kind != variable) { error(12); i = 0; }
         getsym();
-        
-        if(sym==becomes)
-        {
-            getsym();
-        }
-        else
-        {
-            error(13);
-        }
-        
+        if (sym == becomes) getsym(); else error(13);
         expression(fsys);
-        
-        if(i!=0)
-        {
-            gen(sto,lev-table[i].level,table[i].addr);
-        }
+        if (i != 0) gen(sto, lev - table[i].level, table[i].addr);
     }
-    else if(sym==callsym)
+    else if (sym == callsym)
     {
         getsym();
-        if(sym!=ident)
-        {
-            error(14);
-        }
+        if (sym != ident) error(14);
         else
         {
-            i=position(id);
-            if(i==0)
-            {
-                error(11);
-            }
-            else if(table[i].kind==proc)
-            {
-                gen(cal,lev-table[i].level,table[i].addr);
-            }
-            else
-            {
-                error(15);
-            }
-            
+            i = position(id);
+            if (i == 0) error(11);
+            else if (table[i].kind == proc) gen(cal, lev - table[i].level, table[i].addr);
+            else error(15);
             getsym();
         }
     }
-    else if(sym==ifsym)
+    else if (sym == ifsym)
     {
-        getsym(); condition(fsys|thensym|dosym);
-    
-        if(sym==thensym)
+        getsym();
+        condition(fsys | thensym | dosym);
+        if (sym == thensym) getsym(); else error(16);
+        cx1 = cx; gen(jpc, 0, 0);          // 条件为假时跳转（暂时未知地址）
+        statement(fsys | elsesym);                  // then 部分        
+        if (sym == elsesym)
         {
             getsym();
+            cx2 = cx; gen(jmp, 0, 0);      // then 部分结束后跳过 else
+            code[cx1].a = cx;              // 条件假时跳转到 else 部分开头
+            statement(fsys);                // else 部分
+            code[cx2].a = cx;              // then 部分结束后跳转到整个 if 后面
         }
         else
         {
-            error(16);
+            code[cx1].a = cx;              // 条件假时跳转到整个 if 后面
         }
-        cx1=cx;	gen(jpc,0,0);
+    }
+    else if (sym == beginsym)
+    {
+        getsym();
+        statement(fsys | semicolon | endsym);
+        while (sym == semicolon || (sym & statbegsys))
+        {
+            if (sym == semicolon) getsym(); else error(10);
+            statement(fsys | semicolon | endsym);
+        }
+        if (sym == endsym) getsym(); else error(17);
+    }
+    else if (sym == readsym)
+    {
+        getsym();
+        if (sym != lparen) error(34);
+        getsym();
+        do
+        {
+            if (sym != ident) error(11);
+            i = position(id);
+            if (i == 0) error(11);
+            else if (table[i].kind != variable) error(12);
+            getsym();
+            gen(opr, 0, 16);
+            gen(sto, lev - table[i].level, table[i].addr);
+            if (sym == comma) getsym(); else break;
+        } while (1);
+        if (sym != rparen) error(22);
+        getsym();
+    }
+    else if (sym == writesym)
+    {
+        getsym();
+        if (sym != lparen) error(34);
+        getsym();
+        do
+        {
+            expression(fsys | rparen | comma);
+            gen(opr, 0, 17);
+            if (sym == comma) getsym(); else break;
+        } while (1);
+        if (sym != rparen) error(22);
+        getsym();
+    }
+    else if (sym == exitsym)
+    {
+        getsym();
+        if (while_sp > 0) gen(jmp, 0, while_exit_stack[while_sp - 1]);
+        else error(33);
+    }
+    else if (sym == whilesym)
+    {
+        if (while_sp >= MAX_WHILE_NEST) error(100);
+        else while_exit_stack[while_sp++] = 0;
+        cx1 = cx; getsym();
+        condition(fsys | dosym);
+        cx2 = cx; gen(jpc, 0, 0);
+        if (sym == dosym) getsym(); else error(18);
         statement(fsys);
-        code[cx1].a=cx;	
+        gen(jmp, 0, cx1);
+        code[cx2].a = cx;
+        while_exit_stack[--while_sp] = cx;
     }
-    else if(sym==beginsym)
-    {
-        getsym(); statement(fsys|semicolon|endsym);
-        while(sym==semicolon||(sym&statbegsys))
-        {
-            if(sym==semicolon)
-            {
-                getsym();
-            }
-            else
-            {
-                error(10);
-            }
-            statement(fsys|semicolon|endsym);
-        }
-        if(sym==endsym)
-        {
-            getsym();
-        }
-        else
-        {
-            error(17);
-        }
-    }
-    else if(sym==whilesym)
-    {
-        cx1=cx; getsym();
-        condition(fsys|dosym);
-        cx2=cx;	gen(jpc,0,0);
-        if(sym==dosym)
-        {
-            getsym();
-        }
-        else
-        {
-            error(18);
-        }
-        
-        statement(fsys); gen(jmp,0,cx1);
-        
-        code[cx2].a=cx;
-    }
-
-    test(fsys,0,19);
+    test(fsys, 0, 19);
 }
 
-void block(unsigned long fsys)
+void block(unsigned long long fsys)
 {
     long tx0;		// initial table index
     long cx0; 		// initial code index
@@ -681,6 +621,7 @@ void block(unsigned long fsys)
                 error(4);
             }
             
+
             if(sym==semicolon)
             {
                 getsym();
@@ -803,6 +744,19 @@ void interpret()
                  
                     case 13:
                         t=t-1; s[t]=(s[t]<=s[t+1]);
+                        break;
+                    
+                    //解释器扩展
+                    case 16: // read
+                        t = t + 1;
+                        printf("? ");
+                        scanf("%ld", &s[t]);
+                        break;
+
+                    case 17: // write
+                        printf("%10ld\n", s[t]);
+                        t = t - 1;
+                        break;
                 }
                 break;
             
@@ -811,7 +765,7 @@ void interpret()
                 break;
             
             case sto:
-                s[base(b,i.l)+i.a]=s[t]; printf("%10d\n", s[t]); t=t-1;
+                s[base(b,i.l)+i.a]=s[t];t=t-1;
                 break;
             
             case cal:		// generate new block mark
@@ -846,30 +800,40 @@ int main()
     {
         ssym[i]=nul;
     }
-    
-    strcpy(word[0],  "begin     ");
-    strcpy(word[1],  "call      ");
-    strcpy(word[2],  "const     ");
-    strcpy(word[3],  "do        ");
-    strcpy(word[4],  "end       ");
-    strcpy(word[5],  "if        ");
-    strcpy(word[6],  "odd       ");
-    strcpy(word[7],  "procedure ");
-    strcpy(word[8],  "then      ");
-    strcpy(word[9],  "var       ");
-    strcpy(word[10], "while     ");
-    
-    wsym[0]=beginsym;
-    wsym[1]=callsym;
-    wsym[2]=constsym;
-    wsym[3]=dosym;
-    wsym[4]=endsym;
-    wsym[5]=ifsym;
-    wsym[6]=oddsym;
-    wsym[7]=procsym;
-    wsym[8]=thensym;
-    wsym[9]=varsym;
-    wsym[10]=whilesym;
+   
+
+    //增加的保留字
+    strcpy(word[0], "begin");
+    strcpy(word[1], "call");
+    strcpy(word[2], "const");
+    strcpy(word[3], "do");
+    strcpy(word[4], "end");
+    strcpy(word[5], "if");
+    strcpy(word[6], "odd");
+    strcpy(word[7], "procedure");
+    strcpy(word[8], "then");
+    strcpy(word[9], "var");
+    strcpy(word[10], "while");
+    strcpy(word[11], "else");
+    strcpy(word[12], "exit");
+    strcpy(word[13], "read");
+    strcpy(word[14], "write");
+
+    wsym[0] = beginsym;
+    wsym[1] = callsym;
+    wsym[2] = constsym;
+    wsym[3] = dosym;
+    wsym[4] = endsym;
+    wsym[5] = ifsym;
+    wsym[6] = oddsym;
+    wsym[7] = procsym;
+    wsym[8] = thensym;
+    wsym[9] = varsym;
+    wsym[10] = whilesym;
+    wsym[11] = elsesym;
+    wsym[12] = exitsym;
+    wsym[13] = readsym;
+    wsym[14] = writesym;
     ssym['+']=plus;
     ssym['-']=minus;
     ssym['*']=times;
@@ -891,7 +855,7 @@ int main()
     strcpy(mnemonic[jpc],"JPC");
   
     declbegsys=constsym|varsym|procsym;
-    statbegsys=beginsym|callsym|ifsym|whilesym;
+    statbegsys = beginsym | callsym | ifsym | whilesym | readsym | writesym | exitsym;
     facbegsys=ident|number|lparen;
 
     printf("please input source program file name: ");
@@ -905,7 +869,7 @@ int main()
     }
 
     err=0;
-    cc=0; cx=0; ll=0; ch=' '; kk=al; getsym();
+    cc=0; cx=0; ll=0; ch=' '; getsym();
     lev=0; tx=0;
     block(declbegsys|statbegsys|period);
     
@@ -916,7 +880,9 @@ int main()
     
     if(err==0)
     {
-       // interpret();
+        //只生成 P‑code 而不执行，
+        //为了验证输入输出和过程调用，需要启用解释器并增加新指令
+        interpret();
     }
     else
     {

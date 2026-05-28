@@ -1,0 +1,12 @@
+var x, sum;
+begin
+    sum := 0;
+    read(x);
+    while x > 0 do
+    begin
+        if x = 5 then write(100) else write(200);
+        sum := sum + x;
+        x := x - 1;
+    end;
+    write(sum)
+end.
