@@ -890,8 +890,8 @@ int main()
     strcpy(mnemonic[jmp],"JMP");
     strcpy(mnemonic[jpc],"JPC");
   
-    declbegsys=constsym|varsym|procsym;
-    statbegsys=beginsym|callsym|ifsym|whilesym;
+    declbegsys=constsym|varsym|procsym;  //按位或
+    statbegsys=beginsym|callsym|ifsym|whilesym; 
     facbegsys=ident|number|lparen;
 
     printf("please input source program file name: ");
