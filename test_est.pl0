@@ -1,3 +1,7 @@
+/* 测试: read/write/if-else/while 综合
+   输入: 运行时从键盘读一个整数 x
+   输出: 循环中 x=5 时 write(100), 否则 write(200); 最后 write(sum)
+   预期: 正确解析多语句组合, read 读入整数, while 递减, if-else 分支 */
 var x, sum;
 begin
     sum := 0;

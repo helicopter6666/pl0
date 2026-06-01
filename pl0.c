@@ -66,13 +66,13 @@ void getsym()
 
     // 处理 /* 注释
     if (ch == '/' && (cc + 1 <= ll) && line[cc + 1] == '*') {
-        getch(); getch();
+        getch(); getch();//第一个 getch() 把 * 读进来，第二个 getch() 越过 *，指向注释内容的第一个字符。
         while (1) {
             if (ch == '*' && (cc + 1 <= ll) && line[cc + 1] == '/') {
-                getch(); getch();
+                getch(); getch(); 
                 break;
             }
-            if (feof(infile) && cc >= ll) { error(99); break; }
+            if (feof(infile) && cc >= ll) { error(38); break; }
             getch();
         }
         getsym();
@@ -556,7 +556,7 @@ void statement(unsigned long long fsys)
     }
     else if (sym == whilesym)
     {
-        if (while_sp >= MAX_WHILE_NEST) error(100);
+        if (while_sp >= MAX_WHILE_NEST) error(39);
         else while_exit_stack[while_sp++] = 0;
         cx1 = cx; getsym();
         condition(fsys | dosym);
@@ -580,7 +580,7 @@ void block(unsigned long long fsys)
     long npar;		// parameter count for current procedure
 
     saved_proc_tx = proc_entry_tx;
-
+//0动态链，谁调用了我，我就指向谁；1静态链，谁定义了我，我就指向谁；2返回地址，调用我的下一条指令的地址
     dx=3; tx0 = proc_entry_tx; table[tx0].addr=cx; gen(jmp,0,0);
 
     if(lev>levmax)

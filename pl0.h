@@ -113,8 +113,8 @@ char* err_msg[] =
 /* 35 */ "':' expected",
 /* 36 */ "argument count mismatch",
 /* 37 */ "procedure expected '(' with parameters",
-/* 99 */ "Comment not closed",
-/*100 */ "while nesting too deep",
+/* 38 */ "Comment not closed",
+/* 39 */ "while nesting too deep",
 };
 
 
